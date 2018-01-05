@@ -1,4 +1,4 @@
-#Lucas Zanella
+	#Lucas Zanella
 
 import socket as socket_
 
@@ -11,10 +11,10 @@ class Nmap(object):
 		    self.socket = socket_.socket(socket_.AF_INET, socket_.SOCK_STREAM)
 		else:
 		    self.socket = socket
-		#self.socket.setdefaulttimeout(1)
+		self.socket.settimeout(5)
 
 	def scan(self, addresses=None, ports=None):
-		result = []
+		result = {}
 		if not ports:
 			ports = [80]
 		if not isinstance(ports, list):
@@ -22,7 +22,7 @@ class Nmap(object):
 		for address in transform_addresses_to_range(addresses):
 			for port in ports:
 				print("trying " + address + ":" + str(port))
-				a = self.socket.connect((address, port))
-				result.append(a)
+				a = self.socket.connect_ex((address, port))
+				result[address+":"+str(port)] = a
 		self.socket.close()
 		return result

@@ -10,6 +10,11 @@ delay = 0.01
 def return_range_of_ips(ips):
   return [str(x) for x in list(ipaddress.ip_network(ips))]
 
+def scan_(socket, address, port, result):
+	c = socket.connect_ex((address, port))
+	result[address + ":" + str(port)] = c
+	#print(result)
+
 class Nmap(object):
 	def __init__(self, socket=None, timeout=3):
 		if socket is None:
@@ -17,10 +22,6 @@ class Nmap(object):
 		else:
 		    self.socket = socket
 		self.socket.settimeout(timeout)
-	
-	def scan_(self, address, port, result):
-		c = self.socket.connect_ex((address, port))
-		results.append(c)
 
 	def scan(self, addresses=None, ports=None):
 		result = {}
@@ -32,8 +33,9 @@ class Nmap(object):
 		for address in return_range_of_ips(addresses):
 			for port in ports:
 				print("trying " + address + ":" + str(port))
-				t = Thread(target=scan_, args=(address, port, result,))
-			    	t.start()
+				t = Thread(target=scan_, args=(self.socket, address, port, result,))
+				t.start()
+				threads.append(t)
 				time.sleep(delay)
 		for thread in threads:
 			thread.join()

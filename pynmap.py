@@ -23,7 +23,7 @@ class Nmap(object):
 		    self.socket = socket_.socket(socket_.AF_INET, socket_.SOCK_STREAM)
 		else:
 		    self.socket = socket
-		self.socket.settimeout(timeout)
+		self.socket.settimeout(default_timeout)
 
 	def scan(self, addresses=None, ports=None):
 		result = {}

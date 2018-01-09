@@ -15,12 +15,12 @@ def return_range_of_ips(ips):
   return [str(x) for x in list(ipaddress.ip_network(ips))]
 
 def scan_(socket, address, port, result):
-	#print(socket)
-	#print(socket.connect((address, port)))
-	c = socket.connect_ex((address, port))
-	#print(c)
-	#print(address + ":" + str(port) + " - " + str(c))
-	result[address + ":" + str(port)] = c
+        try:
+	        c = socket.connect_ex((address, port))
+	        result[address + ":" + str(port)] = c
+        except Exception as e:
+                pass
+        socket.close()
 	
 
 
@@ -33,8 +33,10 @@ class Nmap(object):
 	        if not self.proxy:
 	                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	        else:
-                        s = socks.socksocket()
-                        s.set_proxy(socks.SOCKS5, self.proxy['socks_host'], self.proxy['socks_port'])
+	                #print("using socks " + self.proxy['socks_host'] + ":" + str(self.proxy['socks_port']))
+	                s = socks.socksocket()
+	                s.set_proxy(socks.SOCKS5, self.proxy['socks_host'], self.proxy['socks_port'])
+	                #s.connect(('192.168.25.1', 80))
 	        s.settimeout(self.default_timeout) 
 	        return s
 
@@ -54,5 +56,4 @@ class Nmap(object):
 				time.sleep(default_delay)
 		for thread in threads:
 			thread.join()#Waits for all threads to stop so we return all results
-		self.socket.close()
 		return result

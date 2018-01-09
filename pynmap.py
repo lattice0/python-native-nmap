@@ -18,6 +18,8 @@ def scan_(socket, address, port, result):
         try:
 	        c = socket.connect_ex((address, port))
 	        result[address + ":" + str(port)] = c
+        except socks.GeneralProxyError as e:
+                print(e)
         except Exception as e:
                 pass
         socket.close()

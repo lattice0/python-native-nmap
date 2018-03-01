@@ -25,45 +25,42 @@ def scan_(socket, address, port, result):
                 pass
         socket.close()
 	
-def ip_header(version=5, protocol=None):
-	source_ip = '192.168.1.101'
-	dest_ip = '192.168.1.1' # or socket.gethostbyname('www.google.com')
-	
-	# ip header fields
-	ip_ihl = 5
-	ip_ver = 4
-	ip_tos = 0
+def ip_header(source, destination, version=5, protocol=None, id=None):
+	ip_ihl = 5 # Internet Header Length; Length of entire IP header.???
+	ip_ver = 4 # Version no. of Internet Protocol used (e.g. IPv4).
+	ip_tos = 0 # DSCP: Differentiated Services Code Point; this is Type of Service.
 	ip_tot_len = 0  # kernel will fill the correct total length
-	ip_id = 54321   #Id of this packet
-	ip_frag_off = 0
-	ip_ttl = 255
+	ip_id = id   # Identification: If IP packet is fragmented during the transmission, all the fragments contain same identification number. to identify original IP packet they belong to.
+	ip_frag_off = 0 # Fragment Offset: This offset tells the exact position of the fragment in the original IP Packet.
+	ip_ttl = 255 # Time to Live: To avoid looping in the network, every packet is sent with some TTL value set, which tells the network how many routers (hops) this packet can cross. At each hop, its value is decremented by one and when the value reaches zero, the packet is discarded.
 	ip_proto = socket.IPPROTO_TCP if protocol=="TCP" or socket.IPROTO_UDP if protocol=="UDP"
 	ip_check = 0    # kernel will fill the correct checksum
-	ip_saddr = socket.inet_aton ( source_ip )   #Spoof the source ip address if you want to
-	ip_daddr = socket.inet_aton ( dest_ip )
+	ip_saddr = socket.inet_aton(source)   #Spoof the source ip address if you want to
+	ip_daddr = socket.inet_aton(destination)
 	
 	ip_ihl_ver = (version << 4) + ihl
 	
 	# the ! in the pack format string means network order
 	ip_header = pack('!BBHHHBBH4s4s' , ip_ihl_ver, ip_tos, ip_tot_len, ip_id, ip_frag_off, ip_ttl, ip_proto, ip_check, ip_saddr, ip_daddr)
+	return ip_header
 
-def tcp_header(source=0, destination=0, sequence=0, size=0):
+def tcp_header(source=None, destination=None, sequence=None, ack_sequence=None, data_offset=None, window=None, checksum=0):
 	# tcp header fields
-	tcp_source = 1234   # source port
-	tcp_dest = 80   # destination port
-	tcp_seq = 454
-	tcp_ack_seq = 0
-	tcp_doff = 5    #4 bit field, size of tcp header, 5 * 4 = 20 bytes
+	tcp_source = source   #source port
+	tcp_dest = destination   #destination port
+	tcp_seq = sequence #(32 bits) specifies the number assigned to the first byte of data in the current message. 
+	tcp_ack_seq = ack_sequence #(32 bits) contains the value of the next sequence number that the sender of the segment is expecting to receive, if the ACK control bit is set.
+	tcp_doff = data_offset    #4 bit field, size of tcp header, 5 * 4 = 20 bytes
 	#tcp flags
-	tcp_fin = 0
-	tcp_syn = 1
-	tcp_rst = 0
-	tcp_psh = 0
-	tcp_ack = 0
-	tcp_urg = 0
-	tcp_window = socket.htons (5840)    #   maximum allowed window size
-	tcp_check = 0
-	tcp_urg_ptr = 0
+	tcp_fin = 0 #Means that the sender of the flag has finished sending data.
+	tcp_syn = 1 #Synchronizes sequence numbers to initiate a connection.
+	tcp_rst = 0 #Resets the connection.
+	tcp_psh = 0 #Indicates that data should be passed to the application as soon as possible.
+	tcp_ack = 0 #Indicates that acknowledgement number is valid.
+	tcp_urg = 0 #Indicates that some urgent data has been placed
+	tcp_window = socket.htons (window)    #(16 bits) specifies the size of the sender's receive window (that is, buffer space available for incoming data).
+	tcp_check = checksum #(16 bits) indicates whether the header was damaged in transit.
+	tcp_urg_ptr = 0 # (16 bits) points to the first urgent data byte in the packet.
 	
 	tcp_offset_res = (tcp_doff << 4) + 0
 	tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack << 4) + (tcp_urg << 5)

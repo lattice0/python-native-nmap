@@ -20,12 +20,12 @@ def scan_(socket, address, port, result):
 	        c = socket.connect_ex((address, port))
 	        result[address + ":" + str(port)] = c
         except socks.GeneralProxyError as e:
-                print(e)
+        	print(e)
         except Exception as e:
                 pass
         socket.close()
 	
-def ip_header(source, destination, version=5, protocol=None, id=None):
+def ip_header(source=None, destination=None, version=5, protocol=None, id=None):
 	ip_ihl = 5 # Internet Header Length; Length of entire IP header.???
 	ip_ver = 4 # Version no. of Internet Protocol used (e.g. IPv4).
 	ip_tos = 0 # DSCP: Differentiated Services Code Point; this is Type of Service.
@@ -67,6 +67,29 @@ def tcp_header(source=None, destination=None, sequence=None, ack_sequence=None, 
 	
 	# the ! in the pack format string means network order
 	tcp_header = pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, tcp_urg_ptr)
+	return tcp_header
+
+def tcp_packet(source=None, destination=None, sequence=None, ack_sequence=None, data_offset=None, window=None, checksum=0, data=''):
+	header = tcp_header(source, destination, sequence, ack_sequence, data_offset, window, checksum)
+	# pseudo header fields
+	source_address = socket.inet_aton(source)
+	dest_address = socket.inet_aton(destination)
+	placeholder = 0
+	protocol = socket.IPPROTO_TCP
+	tcp_length = len(header) + len(data)
+	
+	psh = pack('!4s4sBBH' , source_address , dest_address , placeholder , protocol , tcp_length)
+	psh = psh + header + data
+	
+	tcp_check = checksum(psh)
+	#print tcp_checksum
+	
+	# make the tcp header again and fill the correct checksum - remember checksum is NOT in network byte order
+	header = pack('!HHLLBBH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window) + pack('H' , tcp_check) + pack('!H' , tcp_urg_ptr)
+	
+	# final full packet - syn packets dont have any data
+	packet = header + data
+	return packet
 
 # checksum functions needed for calculation checksum
 def checksum(msg):
@@ -111,7 +134,15 @@ class Nmap(object):
 	        s.settimeout(self.default_timeout) 
 	        return s
 
-	def scan(self, addresses=None, ports=None):
+	def _syn_scan(socket=None, destination=None, port=None):
+		data = ''
+		#Send the packet finally - the port specified has no effect
+		packet = ip_header(source, destination, version=5, protocol=socket.TCP, id=None) 
+		       + tcp_packet(source=None, destination=port, sequence=None, ack_sequence=None, data_offset=None, window=None, checksum=0, data=data) 
+		       + data
+		socket.sendto(packet, (host , 0 ))
+
+	def _scan(self, method=None, addresses=None, ports=None):
 		result = {}
 		threads = []
 		if not ports:

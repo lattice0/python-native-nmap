@@ -5,8 +5,9 @@ import ipaddress
 from threading import Thread
 import time
 import copy
-import socks
+#import socks
 from struct import *
+import random
 
 #Maximum threads concurrently running is default_delay*default_timeout
 default_delay = 0.01 #Delay between thread launches
@@ -24,6 +25,28 @@ def scan_(socket, address, port, result):
         except Exception as e:
                 pass
         socket.close()
+
+def new_socket(self, proxy=False):
+		if not self.proxy:
+				s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		else:
+				#print("using socks " + self.proxy['socks_host'] + ":" + str(self.proxy['socks_port']))
+				s = socks.socksocket()
+				s.set_proxy(socks.SOCKS5, self.proxy['socks_host'], self.proxy['socks_port'])
+				#s.connect(('192.168.25.1', 80))
+		#s.settimeout() 
+		return s
+		
+def new_raw_socket(self):
+		if not self.proxy:
+				s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
+		else:
+				#print("using socks " + self.proxy['socks_host'] + ":" + str(self.proxy['socks_port']))
+				#s = socks.socksocket()
+				#s.set_proxy(socks.SOCKS5, self.proxy['socks_host'], self.proxy['socks_port'])
+				#s.connect(('192.168.25.1', 80))
+		#s.settimeout(self.default_timeout) 
+		return s
 	
 def ip_header(source=None, destination=None, version=5, protocol=None, id=None):
 	ip_ihl = 5 # Internet Header Length; Length of entire IP header.???
@@ -44,55 +67,45 @@ def ip_header(source=None, destination=None, version=5, protocol=None, id=None):
 	ip_header = pack('!BBHHHBBH4s4s' , ip_ihl_ver, ip_tos, ip_tot_len, ip_id, ip_frag_off, ip_ttl, ip_proto, ip_check, ip_saddr, ip_daddr)
 	return ip_header
 
-def tcp_header(source=None, destination=None, sequence=None, ack_sequence=None, data_offset=None, window=None, checksum=0):
-	# tcp header fields
-	tcp_source = source   #source port
-	tcp_dest = destination   #destination port
-	tcp_seq = sequence #(32 bits) specifies the number assigned to the first byte of data in the current message. 
-	tcp_ack_seq = ack_sequence #(32 bits) contains the value of the next sequence number that the sender of the segment is expecting to receive, if the ACK control bit is set.
-	tcp_doff = data_offset    #4 bit field, size of tcp header, 5 * 4 = 20 bytes
-	#tcp flags
-	tcp_fin = 0 #Means that the sender of the flag has finished sending data.
-	tcp_syn = 1 #Synchronizes sequence numbers to initiate a connection.
-	tcp_rst = 0 #Resets the connection.
-	tcp_psh = 0 #Indicates that data should be passed to the application as soon as possible.
-	tcp_ack = 0 #Indicates that acknowledgement number is valid.
-	tcp_urg = 0 #Indicates that some urgent data has been placed
-	tcp_window = socket.htons (window)    #(16 bits) specifies the size of the sender's receive window (that is, buffer space available for incoming data).
-	tcp_check = checksum #(16 bits) indicates whether the header was damaged in transit.
+def tcp_packet(source=None, destination=None, sequence=None, ack_sequence=None, data_offset=None, window=None,
+			  fin=0,
+			  syn=0,
+			  rst=0,
+			  psh=0,
+			  ack=0,
+			  urg=0):
+
+	window = socket.htons (window)    #(16 bits) specifies the size of the sender's receive window (that is, buffer space available for incoming data).
 	tcp_urg_ptr = 0 # (16 bits) points to the first urgent data byte in the packet.
 	
-	tcp_offset_res = (tcp_doff << 4) + 0
-	tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack << 4) + (tcp_urg << 5)
-	
-	# the ! in the pack format string means network order
-	tcp_header = pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, tcp_urg_ptr)
-	return tcp_header
+	offset = (data_offset << 4) + 0
+	flags = fin + (syn << 1) + (rst << 2) + (psh <<3) + (ack << 4) + (urg << 5)
 
-def tcp_packet(source=None, destination=None, sequence=None, ack_sequence=None, data_offset=None, window=None, checksum=0, data=''):
-	header = tcp_header(source, destination, sequence, ack_sequence, data_offset, window, checksum)
+	checksum = 0
+	# the ! in the pack format string means network order
+	header = pack('!HHLLBBHHH' , source, destination, sequence, ack_sequence, offset, flags, window, checksum, tcp_urg_ptr)
+
 	# pseudo header fields
-	source_address = socket.inet_aton(source)
-	dest_address = socket.inet_aton(destination)
+	_source = socket.inet_aton(source)
+	_destination = socket.inet_aton(destination)
 	placeholder = 0
 	protocol = socket.IPPROTO_TCP
-	tcp_length = len(header) + len(data)
+	lenght = len(header) + len(data)
 	
-	psh = pack('!4s4sBBH' , source_address , dest_address , placeholder , protocol , tcp_length)
+	psh = pack('!4s4sBBH' , _source , _destination , placeholder , protocol , lenght)
 	psh = psh + header + data
 	
-	tcp_check = checksum(psh)
+	checksum = _checksum(psh)
 	#print tcp_checksum
 	
 	# make the tcp header again and fill the correct checksum - remember checksum is NOT in network byte order
-	header = pack('!HHLLBBH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window) + pack('H' , tcp_check) + pack('!H' , tcp_urg_ptr)
+	header = pack('!HHLLBBH' , source, destination, sequence, ack_sequence, offset, flags,  window) + pack('H' , checksum) + pack('!H' , urg)
 	
-	# final full packet - syn packets dont have any data
 	packet = header + data
 	return packet
 
 # checksum functions needed for calculation checksum
-def checksum(msg):
+def _checksum(msg):
     s = 0
      
     # loop taking 2 characters at a time
@@ -108,41 +121,50 @@ def checksum(msg):
      
     return s
 
+class SynScanner(object):
+	def __init__(socket_factory=None, host=None, port=None):
+		self.socket_factory = socket_factory
+		self.source = socket.gethostname() #IP source
+		self.destination = host #IP destination
+		self.source_port = random.randint(0,65000) #TCP source		
+		self.desination_port = port #TCP destination
+	
+	def scan():
+		data = ''
+		packet = ip_header(source, destination, version=5, protocol=socket.TCP, id=None) 
+			   + tcp_packet(source=self.source_port, destination=port, sequence=0, ack_sequence=0, data_offset=None, window=None, checksum=0, data=data) 
+			   + data
+		
+		listener = socket_factory()
+		listener.bind((socket.gethostname(), self.source_port))
+		listener.listen(1)
+
+		socket_factory().sendto(packet, (destination, 0)) #Send the packet finally - the port specified has no effect
+
+		while True:
+			socket, addr = listener.accept()
+			print("got a connection from %s" % str(addr))
+			packet = ip_header(self.source, self.destination, version=5, protocol=socket.TCP, id=None) 
+			   	   + tcp_packet(source=self.source_port, 
+					  			destination=self.desination_port, 
+								sequence=0, 
+								ack_sequence=0, 
+								data_offset=None, 
+								window=None, 
+								checksum=0, 
+								data=data) 
+			       + data
+			socket.send(packet)
+    		socket.close()
+		#...
+		return result
+
 class Nmap(object):
 	def __init__(self, proxy=None, default_timeout=3):
 		self.proxy = proxy
 		self.default_timeout = default_timeout
-		
-	def new_socket(self):
-	        if not self.proxy:
-	                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	        else:
-	                #print("using socks " + self.proxy['socks_host'] + ":" + str(self.proxy['socks_port']))
-	                s = socks.socksocket()
-	                s.set_proxy(socks.SOCKS5, self.proxy['socks_host'], self.proxy['socks_port'])
-	                #s.connect(('192.168.25.1', 80))
-	        s.settimeout(self.default_timeout) 
-	        return s
-	def new_raw_socket(self):
-	        if not self.proxy:
-	                s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
-	        else:
-	                #print("using socks " + self.proxy['socks_host'] + ":" + str(self.proxy['socks_port']))
-	                #s = socks.socksocket()
-	                #s.set_proxy(socks.SOCKS5, self.proxy['socks_host'], self.proxy['socks_port'])
-	                #s.connect(('192.168.25.1', 80))
-	        s.settimeout(self.default_timeout) 
-	        return s
 
-	def _syn_scan(socket=None, destination=None, port=None):
-		data = ''
-		#Send the packet finally - the port specified has no effect
-		packet = ip_header(source, destination, version=5, protocol=socket.TCP, id=None) 
-		       + tcp_packet(source=None, destination=port, sequence=None, ack_sequence=None, data_offset=None, window=None, checksum=0, data=data) 
-		       + data
-		socket.sendto(packet, (host , 0 ))
-
-	def _scan(self, method=None, addresses=None, ports=None):
+	def scan(self, method=None, addresses=None, ports=None):
 		result = {}
 		threads = []
 		if not ports:
